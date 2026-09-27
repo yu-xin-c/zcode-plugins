@@ -1,0 +1,84 @@
+name: Windows runtime smoke
+
+on:
+  push:
+    branches: [codex/windows-smoke-validation]
+
+permissions:
+  contents: read
+
+jobs:
+  video2code:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Exercise launcher and plugin tests
+        shell: pwsh
+        run: |
+          py -3 --version
+          python --version
+          node --version
+          python -m unittest tests.test_video2code_plugin -v
+
+      - name: Exercise hooks from a path containing spaces
+        shell: pwsh
+        run: |
+          $pluginRoot = Join-Path $env:RUNNER_TEMP "video2code plugin"
+          Copy-Item plugins/video2code $pluginRoot -Recurse
+          $projectRoot = Join-Path $env:RUNNER_TEMP "video2code project"
+          New-Item -ItemType Directory -Path $projectRoot | Out-Null
+          $env:CLAUDE_PLUGIN_ROOT = $pluginRoot
+          $env:CLAUDE_PROJECT_DIR = $projectRoot
+          foreach ($script in @(
+            "env_check.py",
+            "check_video_input.py",
+            "check_url_input.py",
+            "check_plan_first.py",
+            "check_closeout.py"
+          )) {
+            "{}" | node "$pluginRoot/hooks/run_python.mjs" "$pluginRoot/hooks/$script"
+            if ($LASTEXITCODE -ne 0) {
+              throw "$script failed with exit code $LASTEXITCODE"
+            }
+          }
+
+      - name: Exercise the inherited Python HTTP server
+        shell: pwsh
+        env:
+          PYTHONPATH: plugins/video2code/mcp
+        run: |
+          @'
+          import tempfile
+          import urllib.request
+          from pathlib import Path
+          from v2c_tools import deploy
+
+          with tempfile.TemporaryDirectory(prefix="video2code httpd ") as directory:
+              root = Path(directory)
+              (root / "index.html").write_text("windows-ok", encoding="utf-8")
+              port = deploy._find_free_port()
+              proc = deploy._spawn_httpd(root, port)
+              try:
+                  body = urllib.request.urlopen(
+                      f"http://127.0.0.1:{port}/", timeout=5
+                  ).read()
+                  assert body == b"windows-ok", body
+              finally:
+                  proc.terminate()
+                  proc.wait(timeout=5)
+          print("httpd-ok")
+          '@ | python -
+
+      - name: Validate and package
+        shell: pwsh
+        run: |
+          python scripts/validate.py
+          python scripts/build_dist.py

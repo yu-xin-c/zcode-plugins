@@ -26,7 +26,12 @@ jobs:
           py -3 --version
           python --version
           node --version
-          python -m unittest tests.test_video2code_plugin -v
+          python -m unittest `
+            tests.test_video2code_plugin.ManifestTest `
+            tests.test_video2code_plugin.ComponentTest `
+            tests.test_video2code_plugin.DocumentationTest `
+            tests.test_video2code_plugin.PackagingTest `
+            -v
 
       - name: Exercise hooks from a path containing spaces
         shell: pwsh

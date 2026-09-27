@@ -221,28 +221,31 @@ class ComponentTest(unittest.TestCase):
         self.assertIn('["py", ["-3"]]', launcher_source)
         self.assertIn('["python3", []]', launcher_source)
         self.assertIn('if (result.error?.code === "ENOENT") continue;', launcher_source)
+        self.assertIn('childEnv.PYTHONUTF8 = "1"', launcher_source)
+        self.assertIn('childEnv.PYTHONIOENCODING = "utf-8"', launcher_source)
         with tempfile.TemporaryDirectory(prefix="video2code-launcher-") as directory:
             root = Path(directory)
             probe = root / "probe.py"
             probe.write_text(
-                "import json, sys\nprint(json.dumps(sys.argv[1:]))\n",
+                "import json, sys\n"
+                "print(json.dumps(sys.argv[1:], ensure_ascii=False))\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
-                [node, str(launcher), str(probe), "hello world"],
+                [node, str(launcher), str(probe), "hello world", "复刻"],
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(json.loads(result.stdout), ["hello world"])
+            self.assertEqual(json.loads(result.stdout), ["hello world", "复刻"])
 
             failure = root / "failure.py"
             failure.write_text("raise SystemExit(7)\n", encoding="utf-8")
             result = subprocess.run(
                 [node, str(launcher), str(failure)],
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=False,
             )
             self.assertEqual(result.returncode, 7, result.stderr)

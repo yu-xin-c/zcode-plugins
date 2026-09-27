@@ -72,7 +72,9 @@
 四个都是 `command` 类型。它们和两个 MCP 服务都通过插件自带的
 [`run_python.mjs`](./hooks/run_python.mjs) 启动 Python，不再假设宿主一定提供
 `python3` 命令。Windows 依次尝试 `py -3`、`python`、`python3`，macOS 和 Linux
-依次尝试 `python3`、`python`；选中解释器后会原样传递其退出码。
+依次尝试 `python3`、`python`；选中解释器后会原样传递其退出码，并默认把 Python
+标准输入输出设为 UTF-8，避免中文 Hook 输出受 Windows 控制台代码页限制。调用方已经
+设置的 `PYTHONUTF8` 或 `PYTHONIOENCODING` 会被保留。
 
 | 事件 | 脚本 | 行为 |
 | --- | --- | --- |

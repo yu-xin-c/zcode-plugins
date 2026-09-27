@@ -22,9 +22,13 @@ const candidates =
         ["python", []],
       ];
 
+const childEnv = { ...process.env };
+if (childEnv.PYTHONUTF8 === undefined) childEnv.PYTHONUTF8 = "1";
+if (childEnv.PYTHONIOENCODING === undefined) childEnv.PYTHONIOENCODING = "utf-8";
+
 for (const [command, prefixArgs] of candidates) {
   const result = spawnSync(command, [...prefixArgs, script, ...scriptArgs], {
-    env: process.env,
+    env: childEnv,
     stdio: "inherit",
   });
 

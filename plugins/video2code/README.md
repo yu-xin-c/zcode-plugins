@@ -73,7 +73,9 @@ All four are `command` hooks. They and both MCP servers use the bundled
 [`run_python.mjs`](./hooks/run_python.mjs) launcher instead of assuming the host
 provides a `python3` executable. On Windows it tries `py -3`, `python`, then
 `python3`; on macOS and Linux it tries `python3`, then `python`. The launcher
-preserves the selected interpreter's exit status.
+preserves the selected interpreter's exit status and defaults Python stdio to
+UTF-8 so localized Hook output is not limited by the Windows console code page.
+Existing `PYTHONUTF8` and `PYTHONIOENCODING` values are respected.
 
 | Event | Script | Behavior |
 | --- | --- | --- |

@@ -69,7 +69,10 @@
 
 ## Hooks
 
-四个都是 `command` 类型，用 `python3` 执行 [`hooks/`](./hooks) 下的脚本。
+四个都是 `command` 类型。它们和两个 MCP 服务都通过插件自带的
+[`run_python.mjs`](./hooks/run_python.mjs) 启动 Python，不再假设宿主一定提供
+`python3` 命令。Windows 依次尝试 `py -3`、`python`、`python3`，macOS 和 Linux
+依次尝试 `python3`、`python`；选中解释器后会原样传递其退出码。
 
 | 事件 | 脚本 | 行为 |
 | --- | --- | --- |
@@ -90,8 +93,8 @@
 不要手工逐项确认，直接跑体检脚本：
 
 ```bash
-python3 skills/env-setup/scripts/env_doctor.py
-python3 skills/env-setup/scripts/env_doctor.py --fix
+node hooks/run_python.mjs skills/env-setup/scripts/env_doctor.py
+node hooks/run_python.mjs skills/env-setup/scripts/env_doctor.py --fix
 ```
 
 ## 副作用、网络访问与数据

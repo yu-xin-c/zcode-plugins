@@ -42,7 +42,7 @@ PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd())
 WEB_SCRIPTS = PLUGIN_ROOT / "skills" / "web-replicate" / "scripts"
 TPL_DIR = PLUGIN_ROOT / "skills" / "web-replicate" / "templates" / "default" / "template"
 NM_LOCAL_ROOT = Path(os.environ.get("NM_LOCAL_ROOT", "/tmp/webapp-node-modules"))
-PY = sys.executable or "python3"
+PY = sys.executable or ("python" if os.name == "nt" else "python3")
 # 命令行里用 PYQ: Windows 解释器路径常含空格, do_fix 又走 shell=True
 PYQ = f'"{PY}"' if " " in PY else PY
 
@@ -231,7 +231,7 @@ PY_MODULES = [
 ]
 
 CHECKS: list[Check] = [
-    Check("py", "python3 ≥ 3.10", "hook 与 MCP server 用了 3.10+ 语法 (X | Y 注解)",
+    Check("py", "Python ≥ 3.10", "hook 与 MCP server 用了 3.10+ 语法 (X | Y 注解)",
           probe_py_version,
           need="Python 3.10 或更高 (CC 调 hook/MCP 用的就是这个解释器)",
           fix=by_os(any=["# 换一个 3.10+ 解释器, 例如 conda create -n v2c python=3.12"]),
@@ -364,7 +364,7 @@ def render(results: list[Result]) -> str:
         for cmd in r.check.fix:
             lines.append(f"       {cmd}")
     if any(r.check.auto for r in bad if r.status == "missing"):
-        lines.append(f"[env] 自动项可一把过: python3 {Path(__file__).name} --fix "
+        lines.append(f"[env] 自动项可一把过: {PYQ} {Path(__file__).name} --fix "
                      "(只跑上面标 自动可装 的命令)")
     return "\n".join(lines)
 

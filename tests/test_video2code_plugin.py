@@ -11,7 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -39,8 +41,9 @@ EXPECTED_SKILLS = {
 EXPECTED_MCP_SERVERS = {"runtime", "video"}
 EXPECTED_HOOK_EVENTS = {"SessionStart", "UserPromptSubmit", "PreToolUse", "Stop"}
 
-# Every hook command is `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/<script>.py"`.
+# Hook and MCP commands include a plugin-root-relative Python script path.
 HOOK_SCRIPT = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+\.py)")
+LAUNCHER_ARG = "${CLAUDE_PLUGIN_ROOT}/hooks/run_python.mjs"
 
 
 def load_json(path: Path) -> dict:
@@ -76,7 +79,7 @@ class ManifestTest(unittest.TestCase):
 
         self.assertEqual(zcode, claude)
         self.assertEqual(zcode["name"], "video2code")
-        self.assertEqual(zcode["version"], "0.6.0")
+        self.assertEqual(zcode["version"], "0.6.1")
         self.assertEqual(zcode["license"], "MIT")
         self.assertEqual(zcode["author"], {"name": "Z.ai", "url": "https://z.ai"})
         self.assertEqual(set(zcode["description_i18n"]), {"en", "zh-CN"})
@@ -134,8 +137,9 @@ class ManifestTest(unittest.TestCase):
         for name, server in mcp["mcpServers"].items():
             with self.subTest(server=name):
                 self.assertEqual(server["type"], "stdio")
-                self.assertEqual(server["command"], "python3")
-                script = HOOK_SCRIPT.search(server["args"][0])
+                self.assertEqual(server["command"], "node")
+                self.assertEqual(server["args"][0], LAUNCHER_ARG)
+                script = HOOK_SCRIPT.search(server["args"][1])
                 self.assertIsNotNone(script)
                 self.assertTrue((PLUGIN / script.group(1)).is_file())
 
@@ -184,6 +188,11 @@ class ComponentTest(unittest.TestCase):
                     with self.subTest(event=event):
                         self.assertEqual(hook["type"], "command")
                         self.assertGreater(hook["timeout"], 0)
+                        self.assertTrue(
+                            hook["command"].startswith(
+                                'node "${CLAUDE_PLUGIN_ROOT}/hooks/run_python.mjs" '
+                            )
+                        )
                         found = HOOK_SCRIPT.search(hook["command"])
                         self.assertIsNotNone(found)
                         self.assertTrue((PLUGIN / found.group(1)).is_file())
@@ -199,6 +208,54 @@ class ComponentTest(unittest.TestCase):
                 "hooks/check_closeout.py",
             },
         )
+
+    def test_python_launcher_executes_scripts_and_preserves_exit_status(self) -> None:
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is required to exercise the bundled launcher")
+
+        launcher = PLUGIN / "hooks" / "run_python.mjs"
+        self.assertTrue(launcher.is_file())
+        launcher_source = launcher.read_text(encoding="utf-8")
+        self.assertIn('process.platform === "win32"', launcher_source)
+        self.assertIn('["py", ["-3"]]', launcher_source)
+        self.assertIn('["python3", []]', launcher_source)
+        self.assertIn('if (result.error?.code === "ENOENT") continue;', launcher_source)
+        with tempfile.TemporaryDirectory(prefix="video2code-launcher-") as directory:
+            root = Path(directory)
+            probe = root / "probe.py"
+            probe.write_text(
+                "import json, sys\nprint(json.dumps(sys.argv[1:]))\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [node, str(launcher), str(probe), "hello world"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), ["hello world"])
+
+            failure = root / "failure.py"
+            failure.write_text("raise SystemExit(7)\n", encoding="utf-8")
+            result = subprocess.run(
+                [node, str(launcher), str(failure)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 7, result.stderr)
+
+    def test_runtime_server_reuses_the_selected_python_interpreter(self) -> None:
+        deploy = (PLUGIN / "mcp" / "v2c_tools" / "deploy.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            '[sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1"]',
+            deploy,
+        )
+        self.assertNotIn('["python3", "-m", "http.server"', deploy)
 
     def test_closeout_hook_and_audit_script_share_one_rule_set(self) -> None:
         """The Stop hook must delegate, not re-implement the contract rules."""
@@ -268,6 +325,7 @@ class PackagingTest(unittest.TestCase):
             "video2code/LICENSE",
             "video2code/requirements.txt",
             "video2code/hooks/hooks.json",
+            "video2code/hooks/run_python.mjs",
             "video2code/mcp/runtime_server.py",
             "video2code/mcp/video_server.py",
             "video2code/skills/web-replicate/scripts/init-webapp.sh",

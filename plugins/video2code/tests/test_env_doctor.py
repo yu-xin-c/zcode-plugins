@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -40,6 +41,44 @@ class McpDependencyProbeTest(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertIn("1.9.0", detail)
+
+    def test_python_package_fixes_use_selected_interpreter_and_user_site(self) -> None:
+        python_package_checks = [
+            check for check in env_doctor.CHECKS if check.id.startswith("py-")
+        ]
+
+        self.assertGreaterEqual(len(python_package_checks), 4)
+        for check in python_package_checks:
+            with self.subTest(check=check.id):
+                self.assertTrue(check.fix)
+                self.assertTrue(check.fix[0].startswith(env_doctor.PIP_USER_INSTALL))
+
+    def test_fix_recheck_adds_new_user_site_to_current_process(self) -> None:
+        check = env_doctor.Check(
+            "fixture",
+            "fixture",
+            "fixture",
+            lambda: (True, "ready"),
+            fix=[f'{env_doctor.PYQ} -c "raise SystemExit(0)"'],
+            auto=True,
+        )
+        missing = env_doctor.Result(check, "missing", "not ready")
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            env_doctor.site, "getusersitepackages", return_value=directory
+        ), patch.object(env_doctor.importlib, "invalidate_caches") as invalidate, patch.object(
+            env_doctor, "CHECKS", [check]
+        ):
+            if directory in sys.path:
+                sys.path.remove(directory)
+            try:
+                result = env_doctor.do_fix([missing])
+                self.assertIn(directory, sys.path)
+                invalidate.assert_called_once_with()
+                self.assertEqual(result[0].status, "ok")
+            finally:
+                if directory in sys.path:
+                    sys.path.remove(directory)
 
 
 if __name__ == "__main__":

@@ -28,7 +28,9 @@ jobs:
           py -3 --version
           python --version
           node --version
-          python -m unittest discover -s plugins/video2code/tests -v
+          python -m unittest discover -s plugins/video2code/tests -p test_python_launcher.py -v
+          if ($LASTEXITCODE -ne 0) { throw "Launcher tests failed" }
+          node plugins/video2code/hooks/run_python.mjs -m unittest discover -s plugins/video2code/tests -v
           if ($LASTEXITCODE -ne 0) { throw "Plugin tests failed" }
 
       - name: Exercise hooks from a path containing spaces

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
+import venv
 from pathlib import Path
 from unittest.mock import patch
 
@@ -42,7 +46,7 @@ class McpDependencyProbeTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("1.9.0", detail)
 
-    def test_python_package_fixes_use_selected_interpreter_and_user_site(self) -> None:
+    def test_python_package_fixes_use_selected_interpreter(self) -> None:
         python_package_checks = [
             check for check in env_doctor.CHECKS if check.id.startswith("py-")
         ]
@@ -51,7 +55,27 @@ class McpDependencyProbeTest(unittest.TestCase):
         for check in python_package_checks:
             with self.subTest(check=check.id):
                 self.assertTrue(check.fix)
-                self.assertTrue(check.fix[0].startswith(env_doctor.PIP_USER_INSTALL))
+                self.assertTrue(check.fix[0].startswith(env_doctor.PIP_INSTALL))
+
+    def test_virtualenv_fix_uses_its_own_package_directory(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="video2code venv ") as directory:
+            venv.EnvBuilder(with_pip=True).create(directory)
+            python = Path(directory) / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            probe = subprocess.run(
+                [str(python), "-c",
+                 "import json, runpy, sys; "
+                 "doctor = runpy.run_path(sys.argv[1]); "
+                 "print(json.dumps(doctor['PIP_INSTALL']))", str(DOCTOR_PATH)],
+                capture_output=True, text=True, check=True,
+            )
+            command = json.loads(probe.stdout)
+            result = subprocess.run(
+                command + " --no-index v2c-smoke-nonexistent-package",
+                shell=True, capture_output=True, text=True,
+            )
+            self.assertNotIn("--user", command)
+            self.assertNotIn("--break-system-packages", command)
+            self.assertIn("No matching distribution found", result.stderr)
 
     def test_fix_recheck_adds_new_user_site_to_current_process(self) -> None:
         check = env_doctor.Check(
@@ -66,6 +90,7 @@ class McpDependencyProbeTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory, patch.object(
             env_doctor.site, "getusersitepackages", return_value=directory
+        ), patch.object(env_doctor.site, "ENABLE_USER_SITE", True
         ), patch.object(env_doctor.importlib, "invalidate_caches") as invalidate, patch.object(
             env_doctor, "CHECKS", [check]
         ):

@@ -100,6 +100,8 @@ node hooks/run_python.mjs skills/env-setup/scripts/env_doctor.py
 node hooks/run_python.mjs skills/env-setup/scripts/env_doctor.py --fix
 ```
 
+The launcher skips interpreters older than Python 3.10. Run the doctor in the same environment as ZCode: GUI and terminal `PATH` values may select different interpreters. Python repairs install into the selected virtual environment, or the selected interpreter's user site outside a virtual environment; externally managed installations such as Homebrew additionally require pip's `--break-system-packages` flag, applied only together with `--user`.
+
 ## Side effects, network access, and data
 
 Enabling this plugin grants code-execution trust. Concretely, it will:
@@ -107,7 +109,7 @@ Enabling this plugin grants code-execution trust. Concretely, it will:
 - **Execute commands** — `ffmpeg`/`ffprobe` for transcoding and frame extraction, and `skills/web-replicate/scripts/init-webapp.sh`, which runs `npm install` to populate `node_modules`.
 - **Write files** — `recordings/` (WebM and MP4), `app/` (the scaffolded project), `out/` (`plan.md`, `verify.jsonl`, `report.md`, comparison images under `out/cmp/`), `.v2c/` (plugin root pointer and hook state, including `.v2c/hook_state/interceptions.jsonl`), and a `node_modules` cache under `/tmp/webapp-node-modules` (override with `NM_LOCAL_ROOT`).
 - **Bind a local port** — `deploy_website` starts a `http.server` on port 8765 or the next free port, bound locally, and stops it when the MCP server process exits.
-- **Access the network** — the npm registry when installing template dependencies, and whatever site you ask it to record.
+- **Access the network** — the configured Python package index when the doctor installs Python dependencies, the npm registry when installing template dependencies, and whatever site you ask it to record.
 - **Send no telemetry** and require no API key, token, or account. There are no credentials in this plugin and nothing is uploaded anywhere.
 
 ## User configuration

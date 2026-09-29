@@ -13,6 +13,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 8cbb7a779d1a0eec4b85d1d5efc2b6bfb6e2b508
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -26,12 +28,8 @@ jobs:
           py -3 --version
           python --version
           node --version
-          python -m unittest `
-            tests.test_video2code_plugin.ManifestTest `
-            tests.test_video2code_plugin.ComponentTest `
-            tests.test_video2code_plugin.DocumentationTest `
-            tests.test_video2code_plugin.PackagingTest `
-            -v
+          python -m unittest discover -s plugins/video2code/tests -v
+          if ($LASTEXITCODE -ne 0) { throw "Plugin tests failed" }
 
       - name: Exercise hooks from a path containing spaces
         shell: pwsh
